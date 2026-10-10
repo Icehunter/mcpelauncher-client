@@ -2,6 +2,7 @@
 #include "../settings.h"
 
 #include <unistd.h>
+#include <sys/statvfs.h>
 #ifdef __FreeBSD__
 #include <sys/sysctl.h>
 #include <sys/user.h>
@@ -70,6 +71,33 @@ FakeJni::JLong MainActivity::getUsedMemory() {
     fclose(file);
     return pageCount * pageSize;
 #endif
+}
+
+static bool statStorage(std::shared_ptr<FakeJni::JString> const& path, std::string const& fallback, struct statvfs& st) {
+    if(path && statvfs(path->asStdString().c_str(), &st) == 0) {
+        return true;
+    }
+    return statvfs(fallback.c_str(), &st) == 0;
+}
+
+FakeJni::JLong MainActivity::calculateAvailableDiskFreeSpace(std::shared_ptr<FakeJni::JString> str) {
+    return getUsableSpace(str);
+}
+
+FakeJni::JLong MainActivity::getUsableSpace(std::shared_ptr<FakeJni::JString> str) {
+    struct statvfs st;
+    if(!statStorage(str, storageDirectory, st)) {
+        return 1024LL * 1024LL * 1024LL * 1024LL;
+    }
+    return (FakeJni::JLong)st.f_bavail * st.f_frsize;
+}
+
+FakeJni::JLong MainActivity::getTotalSpace(std::shared_ptr<FakeJni::JString> str) {
+    struct statvfs st;
+    if(!statStorage(str, storageDirectory, st)) {
+        return 1024LL * 1024LL * 1024LL * 1024LL;
+    }
+    return (FakeJni::JLong)st.f_blocks * st.f_frsize;
 }
 
 FakeJni::JLong MainActivity::getFreeMemory() {

@@ -273,13 +273,11 @@ public:
 
     void setCaretPosition(FakeJni::JInt pos);
 
-    FakeJni::JLong calculateAvailableDiskFreeSpace(std::shared_ptr<FakeJni::JString> str) {
-        return 1024LL * 1024LL * 1024LL * 1024LL;
-    }
+    FakeJni::JLong calculateAvailableDiskFreeSpace(std::shared_ptr<FakeJni::JString> str);
 
-    FakeJni::JLong getUsableSpace(std::shared_ptr<FakeJni::JString> str) {
-        return 1024LL * 1024LL * 1024LL * 1024LL;
-    }
+    FakeJni::JLong getUsableSpace(std::shared_ptr<FakeJni::JString> str);
+
+    FakeJni::JLong getTotalSpace(std::shared_ptr<FakeJni::JString> str);
 
     FakeJni::JInt getCaretPosition();
 

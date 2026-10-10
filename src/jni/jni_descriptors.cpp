@@ -141,6 +141,7 @@ BEGIN_NATIVE_DESCRIPTOR(MainActivity){Constructor<MainActivity>{}},
     {Function<&MainActivity::getAllocatableBytes>{}, "getAllocatableBytes"},
     {Function<&MainActivity::calculateAvailableDiskFreeSpace>{}, "calculateAvailableDiskFreeSpace"},
     {Function<&MainActivity::getUsableSpace>{}, "getUsableSpace"},
+    {Function<&MainActivity::getTotalSpace>{}, "getTotalSpace"},
     END_NATIVE_DESCRIPTOR
 
     BEGIN_NATIVE_DESCRIPTOR(TextInputState)

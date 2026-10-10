@@ -154,6 +154,7 @@ void HttpClientRequest::doRequestAsync(FakeJni::JLong sourceCall) {
             auto ret = curl_easy_perform(curl);
             long response_code;
             curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
+            if(ret != CURLE_OK || response_code >= 300) { char* dbgurl = nullptr; curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL, &dbgurl); Log::warn("HTTPDBG", "%s -> curl=%d (%s) http=%ld", dbgurl ? dbgurl : "?", (int)ret, curl_easy_strerror(ret), response_code); }
             anotherme = nullptr; // Clear the shared pointer to avoid dangling reference
             if (me.expired()) {
                 Log::error("HttpClient", "doRequestAsync called, HttpClientRequest is already destroyed");

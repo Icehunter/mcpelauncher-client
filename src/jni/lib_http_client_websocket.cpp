@@ -5,6 +5,9 @@
 #include <thread>
 #include <unistd.h>
 #include <poll.h>
+#include <algorithm>
+#include <mutex>
+#include <cstdlib>
 
 #if defined(CURLWS_TEXT) && defined(CURLWS_BINARY)
 #define ENABLE_WEBSOCKETS
@@ -39,6 +42,43 @@ void poll_socket(curl_socket_t sock, int timeout_ms) {
         .events = POLLIN | POLLERR | POLLHUP};
 
     poll(&pfd, 1, timeout_ms);
+}
+
+static bool ws_debug() {
+    static bool on = getenv("SHIM_NETDBG") != nullptr;
+    return on;
+}
+
+// On a CONNECT_ONLY handle, curl_ws_send can send only part of a frame or return CURLE_AGAIN,
+// so this keeps sending until the whole frame is out.
+static CURLcode ws_send_all(CURL* curl, std::mutex& mu, const char* data, size_t len, unsigned int flags) {
+    size_t off = 0;
+    CURLcode rc = CURLE_OK;
+    int spins = 0;
+    do {
+        size_t sent = 0;
+        curl_socket_t sock;
+        mu.lock();
+        rc = curl_ws_send(curl, data + off, len - off, &sent, 0, flags);
+        curl_easy_getinfo(curl, CURLINFO_ACTIVESOCKET, &sock);
+        mu.unlock();
+        off += sent;
+        if(rc == CURLE_AGAIN) {
+            if(++spins > 500) {
+                break;
+            }
+            struct pollfd pfd = {.fd = sock, .events = POLLOUT};
+            poll(&pfd, 1, 10);
+            continue;
+        }
+        if(rc != CURLE_OK) {
+            break;
+        }
+    } while(off < len);
+    if(ws_debug()) {
+        Log::warn("WSDBG", "send flags=%u len=%zu sent=%zu rc=%d", flags, len, off, (int)rc);
+    }
+    return rc;
 }
 
 HttpClientWebSocket::HttpClientWebSocket(FakeJni::JLong owner) {
@@ -90,10 +130,12 @@ void HttpClientWebSocket::connect(std::shared_ptr<FakeJni::JString> url, std::sh
                 }
 
                 if(rc != CURLE_OK) {
+                    Log::warn("HTTPDBG", "websocket recv failed curl=%d (%s)", (int)rc, curl_easy_strerror(rc));
                     break;
                 }
 
                 if(meta->flags & CURLWS_CLOSE) {
+                    if(ws_debug()) Log::warn("WSDBG", "recv close frame");
                     break;
                 }
 
@@ -108,6 +150,7 @@ void HttpClientWebSocket::connect(std::shared_ptr<FakeJni::JString> url, std::sh
 
                 if(meta->bytesleft == 0 && !(meta->flags & CURLWS_CONT)) {
                     // full message assembled
+                    if(ws_debug()) Log::warn("WSDBG", "recv flags=%d len=%zu head=%.*s", meta->flags, msg.len, (int)std::min<size_t>(msg.len, 160), (const char*)msg.data);
                     if(meta->flags & CURLWS_TEXT) {
                         std::string cont((const char*)msg.data, msg.len);
 #ifndef NDEBUG
@@ -136,6 +179,7 @@ void HttpClientWebSocket::connect(std::shared_ptr<FakeJni::JString> url, std::sh
             }
             sendClosed();
         } else {
+            Log::warn("HTTPDBG", "websocket error curl=%d", (int)ret);
             Log::error("HTTPClientWebSocket", "websocket connection closed with an error");
             connected = false;
             FakeJni::LocalFrame frame(*(FakeJni::Jvm*)jvm);
@@ -164,10 +208,9 @@ FakeJni::JBoolean HttpClientWebSocket::sendMessage(std::shared_ptr<FakeJni::JStr
     if(!connected) {
         return false;
     }
-    size_t sent = 0;
-    curlMu.lock();
-    curl_ws_send(curl, msg->asStdString().c_str(), msg->asStdString().length(), &sent, 0, CURLWS_TEXT);
-    curlMu.unlock();
+    auto str = msg->asStdString();
+    if(ws_debug()) Log::warn("WSDBG", "sendMessage len=%zu head=%.*s", str.length(), (int)std::min<size_t>(str.length(), 160), str.c_str());
+    ws_send_all(curl, curlMu, str.c_str(), str.length(), CURLWS_TEXT);
 #endif
     return true;
 }
@@ -180,10 +223,7 @@ FakeJni::JBoolean HttpClientWebSocket::sendBinaryMessage(std::shared_ptr<jnivm::
     if(!connected) {
         return false;
     }
-    size_t sent = 0;
-    curlMu.lock();
-    curl_ws_send(curl, msg->buffer, msg->capacity, &sent, 0, CURLWS_BINARY);
-    curlMu.unlock();
+    ws_send_all(curl, curlMu, (const char*)msg->buffer, msg->capacity, CURLWS_BINARY);
 #endif
     return true;
 }
