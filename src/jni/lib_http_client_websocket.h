@@ -3,6 +3,7 @@
 #include <log.h>
 #include "lib_http_client.h"
 #include <utility>
+#include <atomic>
 #include <jnivm/bytebuffer.h>
 #include <curl/curl.h>
 
@@ -22,9 +23,12 @@ public:
 private:
     void* curl;
     std::mutex curlMu;
+    // Held for a whole message, so frames from two threads never mix.
+    std::mutex sendMu;
     void* jvm;
-    bool connected = false;
+    std::atomic<bool> connected{false};
     struct curl_slist* header = nullptr;
     void sendOpened();
     void sendClosed();
+    FakeJni::JBoolean sendFrame(const char* data, size_t len, unsigned int flags);
 };

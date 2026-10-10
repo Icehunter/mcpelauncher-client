@@ -50,31 +50,39 @@ static bool ws_debug() {
 }
 
 // On a CONNECT_ONLY handle, curl_ws_send can send only part of a frame or return CURLE_AGAIN,
-// so this keeps sending until the whole frame is out.
+// so this keeps sending until the whole frame is out. It gives up after about 5 seconds
+// without progress and returns CURLE_SEND_ERROR.
 static CURLcode ws_send_all(CURL* curl, std::mutex& mu, const char* data, size_t len, unsigned int flags) {
     size_t off = 0;
     CURLcode rc = CURLE_OK;
     int spins = 0;
     do {
         size_t sent = 0;
-        curl_socket_t sock;
+        curl_socket_t sock = CURL_SOCKET_BAD;
         mu.lock();
         rc = curl_ws_send(curl, data + off, len - off, &sent, 0, flags);
         curl_easy_getinfo(curl, CURLINFO_ACTIVESOCKET, &sock);
         mu.unlock();
         off += sent;
-        if(rc == CURLE_AGAIN) {
-            if(++spins > 500) {
-                break;
-            }
-            struct pollfd pfd = {.fd = sock, .events = POLLOUT};
-            poll(&pfd, 1, 10);
-            continue;
-        }
-        if(rc != CURLE_OK) {
+        if(rc != CURLE_OK && rc != CURLE_AGAIN) {
             break;
         }
+        if(sent > 0) {
+            spins = 0;
+        } else if(off < len) {
+            if(++spins > 500) {
+                rc = CURLE_SEND_ERROR;
+                break;
+            }
+            if(sock != CURL_SOCKET_BAD) {
+                struct pollfd pfd = {.fd = sock, .events = POLLOUT};
+                poll(&pfd, 1, 10);
+            }
+        }
     } while(off < len);
+    if(rc == CURLE_AGAIN) {
+        rc = CURLE_OK;
+    }
     if(ws_debug()) {
         Log::warn("WSDBG", "send flags=%u len=%zu sent=%zu rc=%d", flags, len, off, (int)rc);
     }
@@ -210,9 +218,10 @@ FakeJni::JBoolean HttpClientWebSocket::sendMessage(std::shared_ptr<FakeJni::JStr
     }
     auto str = msg->asStdString();
     if(ws_debug()) Log::warn("WSDBG", "sendMessage len=%zu head=%.*s", str.length(), (int)std::min<size_t>(str.length(), 160), str.c_str());
-    ws_send_all(curl, curlMu, str.c_str(), str.length(), CURLWS_TEXT);
-#endif
+    return sendFrame(str.c_str(), str.length(), CURLWS_TEXT);
+#else
     return true;
+#endif
 }
 
 FakeJni::JBoolean HttpClientWebSocket::sendBinaryMessage(std::shared_ptr<jnivm::ByteBuffer> msg) {
@@ -223,7 +232,25 @@ FakeJni::JBoolean HttpClientWebSocket::sendBinaryMessage(std::shared_ptr<jnivm::
     if(!connected) {
         return false;
     }
-    ws_send_all(curl, curlMu, (const char*)msg->buffer, msg->capacity, CURLWS_BINARY);
+    return sendFrame((const char*)msg->buffer, msg->capacity, CURLWS_BINARY);
+#else
+    return true;
+#endif
+}
+
+FakeJni::JBoolean HttpClientWebSocket::sendFrame(const char* data, size_t len, unsigned int flags) {
+#ifdef ENABLE_WEBSOCKETS
+    std::lock_guard<std::mutex> lock(sendMu);
+    if(!connected) {
+        return false;
+    }
+    CURLcode rc = ws_send_all(curl, curlMu, data, len, flags);
+    if(rc != CURLE_OK) {
+        // A frame cut off part way leaves the stream unusable, so drop the connection.
+        Log::error("HTTPClientWebSocket", "websocket send failed curl=%d (%s), closing", (int)rc, curl_easy_strerror(rc));
+        connected = false;
+        return false;
+    }
 #endif
     return true;
 }
