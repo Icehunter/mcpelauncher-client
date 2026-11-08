@@ -5,6 +5,8 @@
 #include "gl_core_patch.h"
 #include "core_patches.h"
 #include "fake_egl.h"
+#include "vibrant_visuals.h"
+#include <mcpelauncher/minecraft_version.h>
 
 #include <sys/poll.h>
 
@@ -84,6 +86,10 @@ void FakeLooper::initializeWindow() {
     Log::info("Launcher", "Creating window");
     associatedWindow = GameWindowManager::getManager()->createWindow("Minecraft",
                                                                      options.windowWidth, options.windowHeight, options.graphicsApi);
+    vibrant_visuals::capture(fake_egl::nativeGetProcAddress, MinecraftVersion::isAtLeast(1, 26, 10, 0));
+    const auto caps = vibrant_visuals::snapshot();
+    Log::info("VibrantVisuals", "Host capabilities captured: Apple ARM64=%d, supported game=%d, ES=%d.%d, compute=%d, renderer='%s'",
+              caps.appleArm64, caps.supportedVersion, caps.major, caps.minor, caps.maxComputeInvocations, caps.renderer.c_str());
     FakeEGL::setupGLOverrides();
 }
 

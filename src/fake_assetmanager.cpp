@@ -15,6 +15,7 @@
 #include <vector>
 #include <string>
 #include "fake_assetmanager.h"
+#include "vibrant_visuals.h"
 #include <mcpelauncher/path_helper.h>
 
 namespace {
@@ -234,6 +235,12 @@ AAsset *AAssetManager_open(FakeAssetManager *amgr, const char *filename, int mod
 
     if(logThis)
         Log::info("AAssetManager", "OPEN ok '%s' as '%s'", filename, fullPath.c_str());
+
+    if(std::strcmp(filename, "assets/tiers.bin") == 0) {
+        auto tier = vibrant_visuals::transform(content, vibrant_visuals::snapshot());
+        Log::info("VibrantVisuals", "Tier asset: %s, GPU='%s'", tier.reason.c_str(), tier.gpu.c_str());
+        content = std::move(tier.bytes);
+    }
 
     auto ret = new AAsset;
     ret->buffer = content;

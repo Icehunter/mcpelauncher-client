@@ -11,6 +11,16 @@ add_executable(mcpelauncher-client src/main.cpp src/main.h src/window_callbacks.
 target_link_libraries(mcpelauncher-client logger properties-parser mcpelauncher-core gamewindow filepicker msa-daemon-client daemon-server-utils cll-telemetry argparser baron android-support-headers libc-shim mcpelauncher-apkinfo ${CURL_LIBRARIES})
 target_include_directories(mcpelauncher-client PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/build_info/ ${CURL_INCLUDE_DIRS})
 
+target_sources(mcpelauncher-client PRIVATE src/vibrant_visuals.cpp src/vibrant_visuals.h)
+target_link_libraries(mcpelauncher-client base64 nlohmann_json)
+
+option(CLIENT_BUILD_VIBRANT_VISUALS_TESTS "Build offline Vibrant Visuals tier policy tests" OFF)
+if(CLIENT_BUILD_VIBRANT_VISUALS_TESTS)
+    add_executable(vibrant-visuals-test tests/vibrant_visuals_test.cpp src/vibrant_visuals.cpp)
+    target_compile_features(vibrant-visuals-test PRIVATE cxx_std_17)
+    target_link_libraries(vibrant-visuals-test base64 nlohmann_json)
+endif()
+
 option(CLIENT_BUILD_GL_ANDROID_ABI_TESTS "Build offline Android-to-Darwin GL ABI tests" OFF)
 if(CLIENT_BUILD_GL_ANDROID_ABI_TESTS)
     add_executable(gl-android-abi-test tests/gl_android_abi_test.cpp src/gl_android_abi.cpp)
