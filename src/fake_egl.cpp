@@ -1,4 +1,5 @@
 #include "fake_egl.h"
+#include "gl_android_abi.h"
 #include "gl_core_patch.h"
 #include "settings.h"
 #include "imgui_ui.h"
@@ -141,11 +142,15 @@ EGLBoolean eglQuerySurface(EGLDisplay display, EGLSurface surface, EGLint attrib
     return EGL_TRUE;
 }
 
-void *eglGetProcAddress(const char *name) {
+void *nativeGetProcAddress(const char *name) {
     auto it = hostProcOverrides.find(name);
     if(it != hostProcOverrides.end())
         return it->second;
     return hostProcAddrFn(name);
+}
+
+void *eglGetProcAddress(const char *name) {
+    return gl_android_abi::wrap(name, nativeGetProcAddress(name));
 }
 
 }  // namespace fake_egl
@@ -295,5 +300,5 @@ void FakeEGL::setupGLOverrides() {
             ((void (*)(unsigned int target, int level, int xoffset, int yoffset, int width, int height, unsigned int format, unsigned int type, const void *data))(fake_egl::hostProcAddrFn("glTexSubImage2D")))(target, level, xoffset, yoffset, width, height, format, type, data);
         };
     }
-    GLCorePatch::installGL(fake_egl::hostProcOverrides, fake_egl::eglGetProcAddress);
+    GLCorePatch::installGL(fake_egl::hostProcOverrides, fake_egl::nativeGetProcAddress);
 }

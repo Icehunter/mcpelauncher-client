@@ -28,6 +28,10 @@ EGLBoolean eglSwapBuffers(EGLDisplay display, EGLSurface surface);
 EGLBoolean eglSwapInterval(EGLDisplay display, EGLint interval);
 EGLBoolean eglQuerySurface(EGLDisplay display, EGLSurface surface, EGLint attribute, EGLint *value);
 
+// Native GLAD and GL patch helpers use the host calling convention.
+void *nativeGetProcAddress(const char *name);
+
+// Android ELF callers use the Android calling convention.
 void *eglGetProcAddress(const char *name);
 
 }  // namespace fake_egl

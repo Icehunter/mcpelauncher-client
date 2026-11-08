@@ -257,16 +257,8 @@ int main(int argc, char* argv[]) {
             elg_lib = strdup(libEGL.data());
             setenv("ANGLE_DEFAULT_PLATFORM", "vulkan", true);
             setenv("VK_ICD_FILENAMES", MoltenVK_icd.data(), true);
-            // Vibrant Visuals not fully supported
-            properties::property_list properties(':');
-            properties::property<int> graphicsMode(properties, "graphics_mode", 2);
-            parseOptions(properties);
-            auto oldOption = graphicsMode.get();
-            if(oldOption != 0 && oldOption != 1) {
-                Log::warn("Launcher", "Vibrant Visuals via MoltenVK are not supported yet and causing rendering issues, disabling this graphics mode!");
-                graphicsMode.set(1);
-                saveOptions(properties);
-            }
+            // Preserve the selected graphics mode on the ANGLE Vulkan path.
+            Log::info("Launcher", "ANGLE Vulkan platform enabled; Vibrant Visuals (graphics_mode 2) allowed");
         } else {
             Log::error("Launcher", "Failed to find one of '%s' and '%s'", libEGL.data(), MoltenVK_icd.data());
             Log::error("Launcher", "Expect seeing a black screen, you have been warned");
@@ -459,7 +451,7 @@ Hardware	: Qualcomm Technologies, Inc MSM8998
         // GLFW needs a window to let eglGetProcAddress return symbols
         FakeLooper::initWindow();
 #ifdef USE_IMGUI
-        gladLoadGLES2Loader(fake_egl::eglGetProcAddress);
+        gladLoadGLES2Loader(fake_egl::nativeGetProcAddress);
 #endif
         MinecraftUtils::setupGLES2Symbols(fake_egl::eglGetProcAddress);
     } else {
@@ -517,7 +509,7 @@ Hardware	: Qualcomm Technologies, Inc MSM8998
         FakeLooper::initWindow();
         MinecraftUtils::setupGLES2Symbols(fake_egl::eglGetProcAddress);
 #ifdef USE_IMGUI
-        gladLoadGLES2Loader(fake_egl::eglGetProcAddress);
+        gladLoadGLES2Loader(fake_egl::nativeGetProcAddress);
 #endif
         // preinit Mods using libGLESv2 can only load now
         if(!freeOnly.get()) {
